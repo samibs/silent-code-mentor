@@ -7,7 +7,9 @@
   "engines": {
     "vscode": "^1.80.0"
   },
-  "activationEvents": ["onCommand:silent-code-mentor.optimizeCode"],
+  "activationEvents": [
+    "onCommand:silent-code-mentor.optimizeCode"
+  ],
   "main": "./extension.js",
   "repository": {
     "type": "git",
@@ -22,7 +24,7 @@
     ]
   },
   "dependencies": {
-    "esprima": "^4.0.1",
-    "escodegen": "^2.0.0"
+    "escodegen": "^2.1.0",
+    "esprima": "^4.0.1"
   }
 }

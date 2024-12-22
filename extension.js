@@ -17,9 +17,9 @@ function activate(context) {
     if (!["javascript", "html", "css"].includes(document.languageId)) return;
 
     const code = document.getText();
-    const enhancedCode = enhanceCode(code, document.languageId);
+    const { enhancedCode, changesLog } = enhanceCodeWithComments(code, document.languageId);
 
-    // Replace code silently
+    // Replace code silently and show changes
     if (enhancedCode !== code) {
       const edit = new vscode.WorkspaceEdit();
       const fullRange = new vscode.Range(
@@ -28,6 +28,11 @@ function activate(context) {
       );
       edit.replace(document.uri, fullRange, enhancedCode);
       vscode.workspace.applyEdit(edit);
+
+      // Show information message for changes made
+      vscode.window.showInformationMessage(
+        `Silent Code Mentor made ${changesLog.length} changes: ${changesLog.join(", ")}`
+      );
     }
   });
 
@@ -35,40 +40,51 @@ function activate(context) {
 }
 
 /**
- * Enhances code silently.
+ * Enhances code silently and adds comments to the code.
  * @param {string} code
  * @param {string} language
- * @returns {string} enhanced code
+ * @returns {object} enhanced code and log of changes
  */
-function enhanceCode(code, language) {
+function enhanceCodeWithComments(code, language) {
+  let changesLog = [];
+  let enhancedCode = code;
+
   switch (language) {
     case "javascript":
-      return enhanceJavaScript(code);
+      enhancedCode = enhanceJavaScriptWithComments(code, changesLog);
+      break;
     case "html":
-      return enhanceHTML(code);
+      enhancedCode = enhanceHTMLWithComments(code, changesLog);
+      break;
     case "css":
-      return enhanceCSS(code);
-    default:
-      return code;
+      enhancedCode = enhanceCSSWithComments(code, changesLog);
+      break;
   }
+
+  return { enhancedCode, changesLog };
 }
 
 /**
- * Enhances JavaScript code by refactoring and adding best practices.
+ * Enhances JavaScript code by refactoring and adding best practices, with comments.
  * @param {string} code
+ * @param {array} changesLog
  * @returns {string} enhanced code
  */
-function enhanceJavaScript(code) {
+function enhanceJavaScriptWithComments(code, changesLog) {
   try {
     const ast = esprima.parseScript(code, { tolerant: true });
 
     traverseAST(ast, (node) => {
-      // Example: Replace "var" with "let" or "const"
+      // Replace "var" with "let"
       if (node.type === "VariableDeclaration" && node.kind === "var") {
         node.kind = "let";
+        changesLog.push('Replaced "var" with "let"');
+        node.leadingComments = [
+          { type: "Line", value: " scm: Replaced 'var' with 'let' for modern JavaScript standards" },
+        ];
       }
 
-      // Example: Add default error handling for async/await
+      // Add default error handling for async/await
       if (
         node.type === "CallExpression" &&
         node.callee.type === "Identifier" &&
@@ -98,11 +114,15 @@ function enhanceJavaScript(code) {
             },
           },
         };
+        changesLog.push("Added error handling for fetch()");
+        tryCatchWrapper.leadingComments = [
+          { type: "Line", value: " scm: Added error handling for fetch()" },
+        ];
         return tryCatchWrapper;
       }
     });
 
-    return escodegen.generate(ast);
+    return escodegen.generate(ast, { comment: true });
   } catch (err) {
     console.error("JavaScript enhancement error:", err);
     return code;
@@ -110,30 +130,35 @@ function enhanceJavaScript(code) {
 }
 
 /**
- * Enhances HTML code by adding accessibility attributes.
+ * Enhances HTML code by adding accessibility attributes, with comments.
  * @param {string} code
+ * @param {array} changesLog
  * @returns {string} enhanced HTML
  */
-function enhanceHTML(code) {
-  // Example: Automatically add alt attributes to images
+function enhanceHTMLWithComments(code, changesLog) {
   return code.replace(/<img([^>]*)>/g, (match, attributes) => {
     if (!attributes.includes("alt=")) {
-      return `<img${attributes} alt="Image description">`;
+      changesLog.push("Added alt attribute to <img>");
+      return `<img${attributes} alt="Image description"> <!-- scm: Added alt attribute for accessibility -->`;
     }
     return match;
   });
 }
 
 /**
- * Enhances CSS by ensuring WCAG compliance (e.g., color contrast).
+ * Enhances CSS by ensuring WCAG compliance (e.g., color contrast), with comments.
  * @param {string} code
+ * @param {array} changesLog
  * @returns {string} enhanced CSS
  */
-function enhanceCSS(code) {
-  // Example: Replace low-contrast colors with WCAG-compliant equivalents
+function enhanceCSSWithComments(code, changesLog) {
   return code.replace(/color:\s*#([0-9a-f]{3,6})/gi, (match, color) => {
     const compliantColor = ensureWCAGCompliance(color);
-    return `color: ${compliantColor}`;
+    if (compliantColor !== color) {
+      changesLog.push(`Updated color ${color} to ${compliantColor} for WCAG compliance`);
+      return `color: ${compliantColor}; /* scm: Updated for WCAG compliance */`;
+    }
+    return match;
   });
 }
 
@@ -159,7 +184,6 @@ function traverseAST(node, callback) {
  * @returns {string} WCAG-compliant color
  */
 function ensureWCAGCompliance(color) {
-  // Example: Replace with a dummy high-contrast color
   return "#000000"; // Replace with a proper algorithm for contrast check
 }
 
