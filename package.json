@@ -2,24 +2,27 @@
   "name": "silent-code-mentor",
   "displayName": "Silent Code Mentor",
   "description": "Silently optimizes and enhances web developers' code in real time.",
-  "version": "0.1.0",
-  "publisher": "yourpublishername",
+  "version": "0.1.1",
+  "publisher": "sbs",
   "engines": {
     "vscode": "^1.80.0"
   },
   "activationEvents": [
-    "onCommand:silent-code-mentor.optimizeCode"
+    "onLanguage:javascript",
+    "onLanguage:html",
+    "onLanguage:css",
+    "onStartupFinished"
   ],
   "main": "./extension.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/samibs/silent-code-mentor.git"
+    "url": "https://github.com/samibs/your-repo.git"
   },
   "contributes": {
     "commands": [
       {
-        "command": "silentcollaborator.optimizeCode",
-        "title": "Optimize Code Silently"
+        "command": "silentCodeMentor.helloWorld",
+        "title": "Silent Code Mentor: Hello World"
       }
     ]
   },

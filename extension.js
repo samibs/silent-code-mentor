@@ -2,164 +2,150 @@ const vscode = require("vscode");
 const esprima = require("esprima");
 const escodegen = require("escodegen");
 
+let outputChannel;
+
 /**
  * Activates the extension.
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-  console.log("Silent Code Mentor is now active!");
+    // Create an output channel for logging
+    outputChannel = vscode.window.createOutputChannel("Silent Code Mentor");
+    outputChannel.appendLine("Silent Code Mentor is now active!");
 
-  // Trigger silent corrections on file save
-  let disposable = vscode.workspace.onWillSaveTextDocument((event) => {
-    const document = event.document;
+    // Trigger silent corrections on file save
+    let disposable = vscode.workspace.onWillSaveTextDocument((event) => {
+        const document = event.document;
 
-    // Only process JavaScript, HTML, or CSS files
-    if (!["javascript", "html", "css"].includes(document.languageId)) return;
+        // Log the document type
+        outputChannel.appendLine(`Processing file: ${document.uri.fsPath}`);
+        outputChannel.appendLine(`Language: ${document.languageId}`);
 
-    const code = document.getText();
-    const { enhancedCode, changesLog } = enhanceCodeWithComments(code, document.languageId);
+        // Only process JavaScript files
+        if (document.languageId !== "javascript") {
+            outputChannel.appendLine("Skipping file (unsupported language).");
+            return;
+        }
 
-    // Replace code silently and show changes
-    if (enhancedCode !== code) {
-      const edit = new vscode.WorkspaceEdit();
-      const fullRange = new vscode.Range(
-        document.positionAt(0),
-        document.positionAt(code.length)
-      );
-      edit.replace(document.uri, fullRange, enhancedCode);
-      vscode.workspace.applyEdit(edit);
+        const code = document.getText();
+        const { enhancedCode, changesLog } = enhanceCodeWithComments(code);
 
-      // Show information message for changes made
-      vscode.window.showInformationMessage(
-        `Silent Code Mentor made ${changesLog.length} changes: ${changesLog.join(", ")}`
-      );
-    }
-  });
+        // Replace code silently and show changes
+        if (enhancedCode !== code) {
+            const edit = new vscode.WorkspaceEdit();
+            const fullRange = new vscode.Range(
+                document.positionAt(0),
+                document.positionAt(code.length)
+            );
+            edit.replace(document.uri, fullRange, enhancedCode);
+            vscode.workspace.applyEdit(edit);
 
-  context.subscriptions.push(disposable);
-}
-
-/**
- * Enhances code silently and adds comments to the code.
- * @param {string} code
- * @param {string} language
- * @returns {object} enhanced code and log of changes
- */
-function enhanceCodeWithComments(code, language) {
-  let changesLog = [];
-  let enhancedCode = code;
-
-  switch (language) {
-    case "javascript":
-      enhancedCode = enhanceJavaScriptWithComments(code, changesLog);
-      break;
-    case "html":
-      enhancedCode = enhanceHTMLWithComments(code, changesLog);
-      break;
-    case "css":
-      enhancedCode = enhanceCSSWithComments(code, changesLog);
-      break;
-  }
-
-  return { enhancedCode, changesLog };
-}
-
-/**
- * Enhances JavaScript code by refactoring and adding best practices, with comments.
- * @param {string} code
- * @param {array} changesLog
- * @returns {string} enhanced code
- */
-function enhanceJavaScriptWithComments(code, changesLog) {
-  try {
-    const ast = esprima.parseScript(code, { tolerant: true });
-
-    traverseAST(ast, (node) => {
-      // Replace "var" with "let"
-      if (node.type === "VariableDeclaration" && node.kind === "var") {
-        node.kind = "let";
-        changesLog.push('Replaced "var" with "let"');
-        node.leadingComments = [
-          { type: "Line", value: " scm: Replaced 'var' with 'let' for modern JavaScript standards" },
-        ];
-      }
-
-      // Add default error handling for async/await
-      if (
-        node.type === "CallExpression" &&
-        node.callee.type === "Identifier" &&
-        node.callee.name === "fetch"
-      ) {
-        const tryCatchWrapper = {
-          type: "TryStatement",
-          block: {
-            type: "BlockStatement",
-            body: [node],
-          },
-          handler: {
-            type: "CatchClause",
-            param: { type: "Identifier", name: "error" },
-            body: {
-              type: "BlockStatement",
-              body: [
-                {
-                  type: "ExpressionStatement",
-                  expression: {
-                    type: "CallExpression",
-                    callee: { type: "Identifier", name: "console.error" },
-                    arguments: [{ type: "Identifier", name: "error" }],
-                  },
-                },
-              ],
-            },
-          },
-        };
-        changesLog.push("Added error handling for fetch()");
-        tryCatchWrapper.leadingComments = [
-          { type: "Line", value: " scm: Added error handling for fetch()" },
-        ];
-        return tryCatchWrapper;
-      }
+            // Log changes
+            outputChannel.appendLine(`Changes applied: ${changesLog.join(", ")}`);
+            vscode.window.showInformationMessage(
+                `Silent Code Mentor made ${changesLog.length} changes: ${changesLog.join(", ")}`
+            );
+        } else {
+            outputChannel.appendLine("No changes were necessary.");
+        }
     });
 
-    return escodegen.generate(ast, { comment: true });
-  } catch (err) {
-    console.error("JavaScript enhancement error:", err);
-    return code;
-  }
+    context.subscriptions.push(disposable);
 }
 
 /**
- * Enhances HTML code by adding accessibility attributes, with comments.
+ * Enhances JavaScript test code silently and adds comments for improvements.
  * @param {string} code
- * @param {array} changesLog
- * @returns {string} enhanced HTML
+ * @returns {object} enhanced code and log of changes
  */
-function enhanceHTMLWithComments(code, changesLog) {
-  return code.replace(/<img([^>]*)>/g, (match, attributes) => {
-    if (!attributes.includes("alt=")) {
-      changesLog.push("Added alt attribute to <img>");
-      return `<img${attributes} alt="Image description"> <!-- scm: Added alt attribute for accessibility -->`;
-    }
-    return match;
-  });
-}
+function enhanceCodeWithComments(code) {
+    let changesLog = [];
+    try {
+        const ast = esprima.parseScript(code, { tolerant: true, comment: true });
 
-/**
- * Enhances CSS by ensuring WCAG compliance (e.g., color contrast), with comments.
- * @param {string} code
- * @param {array} changesLog
- * @returns {string} enhanced CSS
- */
-function enhanceCSSWithComments(code, changesLog) {
-  return code.replace(/color:\s*#([0-9a-f]{3,6})/gi, (match, color) => {
-    const compliantColor = ensureWCAGCompliance(color);
-    if (compliantColor !== color) {
-      changesLog.push(`Updated color ${color} to ${compliantColor} for WCAG compliance`);
-      return `color: ${compliantColor}; /* scm: Updated for WCAG compliance */`;
+        traverseAST(ast, (node) => {
+            // Detect and suggest replacing setTimeout with sinon.useFakeTimers()
+            if (
+                node.type === "CallExpression" &&
+                node.callee.name === "setTimeout" &&
+                node.arguments[1]?.value > 500 // Long timeout
+            ) {
+                changesLog.push(`Detected long-running setTimeout (${node.arguments[1].value}ms)`);
+                node.leadingComments = [
+                    { type: "Line", value: " scm: Consider using sinon.useFakeTimers() for faster test execution" },
+                ];
+            }
+
+            // Warn about unused 'done' callback
+            if (
+                node.type === "FunctionExpression" &&
+                node.params.some((param) => param.name === "done") &&
+                !code.includes("done()")
+            ) {
+                changesLog.push("Found test case with unused 'done' callback");
+                node.leadingComments = [
+                    { type: "Line", value: " scm: Warning: 'done' callback is passed but not used" },
+                ];
+            }
+
+            // Suggest adding .catch for promise error handling
+            if (
+                node.type === "CallExpression" &&
+                node.callee.type === "MemberExpression" &&
+                node.callee.property.name === "then" &&
+                !code.includes(".catch")
+            ) {
+                changesLog.push("Detected promise without .catch for error handling");
+                node.leadingComments = [
+                    { type: "Line", value: " scm: Consider adding '.catch' to handle promise rejection" },
+                ];
+            }
+
+            // Suggest returning promises in tests
+            if (
+                node.type === "ExpressionStatement" &&
+                node.expression.type === "CallExpression" &&
+                node.expression.callee.type === "MemberExpression" &&
+                node.expression.callee.property.name === "then"
+            ) {
+                changesLog.push("Detected promise without return in test");
+                node.leadingComments = [
+                    { type: "Line", value: " scm: Ensure promise is returned for proper test execution" },
+                ];
+            }
+
+            // Suggest refactoring deeply nested promises
+            if (
+                node.type === "CallExpression" &&
+                node.callee.type === "MemberExpression" &&
+                node.callee.property.name === "then" &&
+                code.split(".then").length > 3
+            ) {
+                changesLog.push("Detected deeply nested promise chain");
+                node.leadingComments = [
+                    { type: "Line", value: " scm: Consider refactoring nested promises into async/await for readability" },
+                ];
+            }
+
+            // Suggest reviewing skipped tests
+            if (
+                node.type === "CallExpression" &&
+                node.callee.type === "MemberExpression" &&
+                node.callee.property.name === "skip"
+            ) {
+                changesLog.push("Found skipped test case");
+                node.leadingComments = [
+                    { type: "Line", value: " scm: Review skipped test cases to ensure they are necessary" },
+                ];
+            }
+        });
+
+        return { enhancedCode: escodegen.generate(ast, { comment: true }), changesLog };
+    } catch (err) {
+        outputChannel.appendLine(`Error processing JavaScript: ${err.message}`);
+        console.error("JavaScript enhancement error:", err);
+        return { enhancedCode: code, changesLog };
     }
-    return match;
-  });
 }
 
 /**
@@ -168,23 +154,14 @@ function enhanceCSSWithComments(code, changesLog) {
  * @param {function} callback
  */
 function traverseAST(node, callback) {
-  if (Array.isArray(node)) {
-    node.forEach((child) => traverseAST(child, callback));
-  } else if (node && typeof node === "object") {
-    Object.keys(node).forEach((key) => {
-      traverseAST(node[key], callback);
-    });
-    callback(node);
-  }
-}
-
-/**
- * Ensures WCAG compliance for color contrast.
- * @param {string} color
- * @returns {string} WCAG-compliant color
- */
-function ensureWCAGCompliance(color) {
-  return "#000000"; // Replace with a proper algorithm for contrast check
+    if (Array.isArray(node)) {
+        node.forEach((child) => traverseAST(child, callback));
+    } else if (node && typeof node === "object") {
+        Object.keys(node).forEach((key) => {
+            traverseAST(node[key], callback);
+        });
+        callback(node);
+    }
 }
 
 /**
@@ -193,6 +170,6 @@ function ensureWCAGCompliance(color) {
 function deactivate() {}
 
 module.exports = {
-  activate,
-  deactivate,
+    activate,
+    deactivate,
 };
