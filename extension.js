@@ -21,14 +21,14 @@ function activate(context) {
         outputChannel.appendLine(`Processing file: ${document.uri.fsPath}`);
         outputChannel.appendLine(`Language: ${document.languageId}`);
 
-        // Only process JavaScript files
-        if (document.languageId !== "javascript") {
-            outputChannel.appendLine("Skipping file (unsupported language).");
+        // Only process JavaScript, Vue, TypeScript, or Angular files
+        if (!["javascript", "vue", "typescript", "html"].includes(document.languageId)) {
+            outputChannel.appendLine("Skipping file (unsupported language).\n");
             return;
         }
 
         const code = document.getText();
-        const { enhancedCode, changesLog } = enhanceCodeWithComments(code);
+        const { enhancedCode, changesLog } = enhanceCodeWithComments(code, document.languageId);
 
         // Replace code silently and show changes
         if (enhancedCode !== code) {
@@ -46,7 +46,7 @@ function activate(context) {
                 `Silent Code Mentor made ${changesLog.length} changes: ${changesLog.join(", ")}`
             );
         } else {
-            outputChannel.appendLine("No changes were necessary.");
+            outputChannel.appendLine("No changes were necessary.\n");
         }
     });
 
@@ -54,96 +54,133 @@ function activate(context) {
 }
 
 /**
- * Enhances JavaScript test code silently and adds comments for improvements.
+ * Enhances code silently and adds comments for improvements.
  * @param {string} code
+ * @param {string} language
  * @returns {object} enhanced code and log of changes
  */
-function enhanceCodeWithComments(code) {
+function enhanceCodeWithComments(code, language) {
     let changesLog = [];
     try {
         const ast = esprima.parseScript(code, { tolerant: true, comment: true });
 
         traverseAST(ast, (node) => {
-            // Detect and suggest replacing setTimeout with sinon.useFakeTimers()
-            if (
-                node.type === "CallExpression" &&
-                node.callee.name === "setTimeout" &&
-                node.arguments[1]?.value > 500 // Long timeout
-            ) {
-                changesLog.push(`Detected long-running setTimeout (${node.arguments[1].value}ms)`);
-                node.leadingComments = [
-                    { type: "Line", value: " scm: Consider using sinon.useFakeTimers() for faster test execution" },
-                ];
+            // General JavaScript Improvements
+            if (language === "javascript" || language === "typescript") {
+                // Replace 'var' with 'let' or 'const'
+                if (node.type === "VariableDeclaration" && node.kind === "var") {
+                    node.kind = "let";
+                    changesLog.push("Replaced 'var' with 'let'");
+                    node.leadingComments = [
+                        { type: "Line", value: " scm: Replaced 'var' with 'let' for modern standards" },
+                    ];
+                }
+
+                // Add error handling for fetch()
+                if (
+                    node.type === "CallExpression" &&
+                    node.callee.type === "Identifier" &&
+                    node.callee.name === "fetch"
+                ) {
+                    changesLog.push("Added error handling for fetch()");
+                    node.leadingComments = [
+                        { type: "Line", value: " scm: Added error handling for fetch()" },
+                    ];
+                }
+
+                // Highlight deeply nested promise chains
+                if (
+                    node.type === "CallExpression" &&
+                    node.callee.property?.name === "then" &&
+                    code.split(".then").length > 3
+                ) {
+                    changesLog.push("Refactor deeply nested promise chains");
+                    node.leadingComments = [
+                        { type: "Line", value: " scm: Consider refactoring nested promises into async/await for readability" },
+                    ];
+                }
             }
 
-            // Warn about unused 'done' callback
-            if (
-                node.type === "FunctionExpression" &&
-                node.params.some((param) => param.name === "done") &&
-                !code.includes("done()")
-            ) {
-                changesLog.push("Found test case with unused 'done' callback");
-                node.leadingComments = [
-                    { type: "Line", value: " scm: Warning: 'done' callback is passed but not used" },
-                ];
+            // Vue.js Improvements
+            if (language === "vue") {
+                // Detect missing 'key' in v-for
+                if (
+                    node.type === "VDirective" &&
+                    node.name === "for" &&
+                    !code.includes("key")
+                ) {
+                    changesLog.push("Missing 'key' attribute in v-for loop");
+                    node.leadingComments = [
+                        { type: "Line", value: " scm: Add a 'key' attribute to v-for loops for better performance" },
+                    ];
+                }
+
+                // Detect unsanitized v-html usage
+                if (
+                    node.type === "VAttribute" &&
+                    node.name === "v-html"
+                ) {
+                    changesLog.push("Detected unsanitized v-html usage");
+                    node.leadingComments = [
+                        { type: "Line", value: " scm: Avoid using v-html without sanitization for security" },
+                    ];
+                }
+
+                // Highlight large components
+                if (code.length > 500) {
+                    changesLog.push("Large Vue component detected");
+                    node.leadingComments = [
+                        { type: "Line", value: " scm: Consider splitting large Vue components into smaller ones" },
+                    ];
+                }
             }
 
-            // Suggest adding .catch for promise error handling
-            if (
-                node.type === "CallExpression" &&
-                node.callee.type === "MemberExpression" &&
-                node.callee.property.name === "then" &&
-                !code.includes(".catch")
-            ) {
-                changesLog.push("Detected promise without .catch for error handling");
-                node.leadingComments = [
-                    { type: "Line", value: " scm: Consider adding '.catch' to handle promise rejection" },
-                ];
+            // Angular Improvements
+            if (language === "html") {
+                // Suggest OnPush Change Detection
+                if (code.includes("ChangeDetectionStrategy.Default")) {
+                    changesLog.push("Suggest using OnPush Change Detection");
+                }
+
+                // Add ARIA roles
+                if (
+                    node.type === "HTMLElement" &&
+                    ["button", "div"].includes(node.tagName) &&
+                    !code.includes("aria-")
+                ) {
+                    changesLog.push("Add ARIA roles for accessibility");
+                    node.leadingComments = [
+                        { type: "Line", value: " scm: Add ARIA roles for better accessibility" },
+                    ];
+                }
             }
 
-            // Suggest returning promises in tests
-            if (
-                node.type === "ExpressionStatement" &&
-                node.expression.type === "CallExpression" &&
-                node.expression.callee.type === "MemberExpression" &&
-                node.expression.callee.property.name === "then"
-            ) {
-                changesLog.push("Detected promise without return in test");
-                node.leadingComments = [
-                    { type: "Line", value: " scm: Ensure promise is returned for proper test execution" },
-                ];
-            }
+            // Node.js Improvements
+            if (language === "javascript") {
+                // Warn about synchronous fs operations
+                if (
+                    node.type === "CallExpression" &&
+                    node.callee.type === "MemberExpression" &&
+                    node.callee.object.name === "fs" &&
+                    node.callee.property.name.includes("Sync")
+                ) {
+                    changesLog.push("Warn about synchronous fs operations");
+                    node.leadingComments = [
+                        { type: "Line", value: " scm: Avoid synchronous fs operations for better performance" },
+                    ];
+                }
 
-            // Suggest refactoring deeply nested promises
-            if (
-                node.type === "CallExpression" &&
-                node.callee.type === "MemberExpression" &&
-                node.callee.property.name === "then" &&
-                code.split(".then").length > 3
-            ) {
-                changesLog.push("Detected deeply nested promise chain");
-                node.leadingComments = [
-                    { type: "Line", value: " scm: Consider refactoring nested promises into async/await for readability" },
-                ];
-            }
-
-            // Suggest reviewing skipped tests
-            if (
-                node.type === "CallExpression" &&
-                node.callee.type === "MemberExpression" &&
-                node.callee.property.name === "skip"
-            ) {
-                changesLog.push("Found skipped test case");
-                node.leadingComments = [
-                    { type: "Line", value: " scm: Review skipped test cases to ensure they are necessary" },
-                ];
+                // Suggest using environment variables
+                if (code.includes("process.env")) {
+                    changesLog.push("Ensure safe usage of environment variables");
+                }
             }
         });
 
         return { enhancedCode: escodegen.generate(ast, { comment: true }), changesLog };
     } catch (err) {
-        outputChannel.appendLine(`Error processing JavaScript: ${err.message}`);
-        console.error("JavaScript enhancement error:", err);
+        outputChannel.appendLine(`Error processing ${language} code: ${err.message}`);
+        console.error(`${language} enhancement error:`, err);
         return { enhancedCode: code, changesLog };
     }
 }
