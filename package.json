@@ -1,0 +1,23 @@
+{
+  "name": "silent-collaborator",
+  "displayName": "Silent Collaborator",
+  "description": "Silently optimizes and enhances web developers' code in real time.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "activationEvents": ["onCommand:silent-code-mentor.optimizeCode"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "silentcollaborator.optimizeCode",
+        "title": "Optimize Code Silently"
+      }
+    ]
+  },
+  "dependencies": {
+    "esprima": "^4.0.1",
+    "escodegen": "^2.0.0"
+  }
+}
