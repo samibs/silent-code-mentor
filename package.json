@@ -2,33 +2,61 @@
   "name": "silent-code-mentor",
   "displayName": "Silent Code Mentor",
   "description": "Silently optimizes and enhances web developers' code in real time.",
-  "version": "0.1.2",
+  "version": "0.0.2",
   "publisher": "sbs",
   "engines": {
     "vscode": "^1.80.0"
   },
   "activationEvents": [
-    "onLanguage:javascript",
-    "onLanguage:html",
-    "onLanguage:css",
-    "onStartupFinished"
+    "onDidSaveTextDocument",
+    "workspaceContains:*.js", 
+    "workspaceContains:*.jsx"  
   ],
   "main": "./extension.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/samibs/your-repo.git"
+    "url": "https://github.com/samibs/silent-code-mentor.git"
   },
   "contributes": {
     "commands": [
       {
-        "command": "silentCodeMentor.helloWorld",
-        "title": "Silent Code Mentor: Hello World"
+        "command": "silent-code-mentor.optimize",
+        "title": "Optimize Code Silently"
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Silent Code Mentor",
+      "properties": {
+        "enableAutoFix": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic code optimization on save."
+        },
+        "enableCommentGeneration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic comment generation."
+        },
+        "enableAccessibilityChecks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable accessibility checks."
+        },
+        "enableSecurityChecks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable security checks."
+        }
+      }
+    }
   },
   "dependencies": {
     "@babel/parser": "^7.26.3",
-    "escodegen": "^2.1.0",
-    "typescript": "^5.7.2"
+    "escodegen": "^2.0.0",
+    "esprima": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
   }
 }
